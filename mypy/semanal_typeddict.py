@@ -113,6 +113,9 @@ class TypedDictAnalyzer:
 
         is_closed: bool | None = None
         if "closed" in defn.keywords:
+            for base_expr in defn.base_type_exprs:
+                if isinstance(base_expr, RefExpr):
+                    self.check_closed_arg(defn.keywords["closed"], base_expr.fullname)
             is_closed = require_bool_literal_argument(
                 self.api, defn.keywords["closed"], "closed", False
             )
@@ -599,6 +602,8 @@ class TypedDictAnalyzer:
         fullname = callee.fullname
         if fullname not in TPDICT_NAMES:
             return False, None, []
+        if "closed" in call.arg_names:
+            self.check_closed_arg(call, fullname)
         res = self.parse_typeddict_args(call)
         if res is None:
             # This is a valid typed dict, but some type is not ready.
@@ -810,6 +815,12 @@ class TypedDictAnalyzer:
         return info
 
     # Helpers
+
+    def check_closed_arg(self, ctx: Context, fullname: str) -> None:
+        if fullname != "typing.TypedDict" or self.api.is_stub_file:
+            return
+        if self.options.python_version < (3, 15):
+            self.fail('"closed" is only supported in Python 3.15 and later', ctx)
 
     def is_typeddict(self, expr: Expression) -> bool:
         return isinstance(expr, RefExpr) and (
